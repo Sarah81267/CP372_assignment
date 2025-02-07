@@ -25,16 +25,19 @@ def handle_client(client_socket, client_name):
             print(f"[{client_name}] {message}")
 
             if message == "status":
-                status_message = "\n".join([f"{name}: {details}" for name, details in clients_cache.items()])
+                status_message = f"{client_name}: {clients_cache[client_name]}"
                 client_socket.send(status_message.encode())
             elif message == "list":
                 file_list = "\n".join(file_repository)
                 client_socket.send(file_list.encode())
             elif message in file_repository:
                 file_name = message
-                with open(file_name, 'rb') as file:
-                    file_data = file.read()
-                client_socket.send(file_data)
+                try:
+                    with open(file_name, 'rb') as file:
+                        file_data = file.read()
+                    client_socket.send(file_data)
+                except FileNotFoundError:
+                    client_socket.send(b"File not found.")
             elif message == "exit":
                 break
             else:
@@ -46,8 +49,7 @@ def handle_client(client_socket, client_name):
     clients_cache[client_name]['disconnection_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
     client_socket.close()
     print(f"{client_name} disconnected.")
-
-    # Remove the disconnected client from the cache
+    
     del clients_cache[client_name]
 
 def start_server():
