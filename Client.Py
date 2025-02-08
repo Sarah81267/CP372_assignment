@@ -1,31 +1,32 @@
-import socket
+from socket import *
 
-PORT = 12345
+serverName = "localhost"
+serverPort = 63464
 
-def start_client():
-    client_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    client_socket.connect(('localhost', PORT))
-    client_name = client_socket.recv(1024).decode()
-    
-    if client_name == "Server is full. Try again later.":
-        print(client_name)
-        client_socket.close()
-        return
-    
-    print(f"Connected to server as {client_name}.")
+clientSocket = socket(AF_INET, SOCK_STREAM)
+clientSocket.connect((serverName, serverPort))
 
-    while True:
-        message = input(f"[{client_name}] Enter message: ")
-        client_socket.send(message.encode())
+clientSocket.settimeout(2) 
 
-        if message == "exit":
-            break
-        
-        response = client_socket.recv(1024).decode()
-        print(f"[Server] {response}")
+try:
+    server_response = clientSocket.recv(1024).decode()
 
-    client_socket.close()
-    print("Disconnected from server.")
+    if server_response == "Server full. Try again later.":
+        print(server_response)  
+        clientSocket.close()
+        exit() 
 
-if __name__ == '__main__':
-    start_client()
+except timeout:
+    pass  
+while True:
+    userInput = input("Input a lowercase sentence: ")
+    clientSocket.send(userInput.encode())
+
+    if userInput.lower() == "exit":
+        break
+
+    data = clientSocket.recv(1024).decode()
+    print("From Server:", data)
+
+clientSocket.close()
+print("Disconnected from server.")

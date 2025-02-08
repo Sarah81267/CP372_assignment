@@ -1,77 +1,88 @@
-import socket
+from socket import *
 import threading
-from datetime import datetime
+import datetime
 
-PORT = 12345        
-MAX_CLIENTS = 3     
+SERVER_PORT = 63464
+MAX_CLIENTS = 3
+clients = {}
 
-clients_cache = {}
+serverSocket = socket(AF_INET, SOCK_STREAM)
+serverSocket.bind(("", SERVER_PORT))
+serverSocket.listen(MAX_CLIENTS)
+
+print("Server is now listening for connections...")
+
+clientCount = 1
+clientLock = threading.Lock()
+
 file_repository = ['file1.txt', 'file2.txt', 'file3.txt']
 
-def handle_client(client_socket, client_name):
-    print(f"{client_name} connected.")
-    
-    clients_cache[client_name] = {
-        'connection_time': datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
-        'disconnection_time': None  
-    }
+def main(connectionSocket, address, clientName):
+    global clients
+    Time = datetime.datetime.now()
+    TimeConnected = Time.strftime("%x %X")
 
-    while True:
-        try:
-            message = client_socket.recv(1024).decode('utf-8')
-            if not message:
+    with clientLock:
+        clients[clientName] = {'Connected': TimeConnected, 'Disconnected': "Still Connected.."}
+
+    print(f"Hello {clientName}")
+
+    try:
+        while True:
+            user_input = connectionSocket.recv(1024).decode()
+            if not user_input:
                 break
 
-            print(f"[{client_name}] {message}")
+            print(f"Received from {clientName}: {user_input}")
 
-            if message == "status":
-                status_message = f"{client_name}: {clients_cache[client_name]}"
-                client_socket.send(status_message.encode())
-            elif message == "list":
+            if user_input.lower() == "exit":
+                break  
+
+            elif user_input.lower() == "status":
+                with clientLock:
+                    status = f"{clientName}: {clients[clientName]}"
+                connectionSocket.send(status.encode())
+
+            elif user_input.lower() == "list":
                 file_list = "\n".join(file_repository)
-                client_socket.send(file_list.encode())
-            elif message in file_repository:
-                file_name = message
+                connectionSocket.send(file_list.encode())
+
+            elif user_input in file_repository:
                 try:
-                    with open(file_name, 'rb') as file:
+                    with open(user_input, 'rb') as file:
                         file_data = file.read()
-                    client_socket.send(file_data)
+                    connectionSocket.send(file_data)
                 except FileNotFoundError:
-                    client_socket.send(b"File not found.")
-            elif message == "exit":
-                break
+                    connectionSocket.send(b"File not found.")
+
             else:
-                client_socket.send(f"{message} ACK".encode())
-        except Exception as e:
-            print(f"Error: {e}")
-            break
+                connectionSocket.send(f"{user_input} ACK".encode())
 
-    clients_cache[client_name]['disconnection_time'] = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-    client_socket.close()
-    print(f"{client_name} disconnected.")
-    
-    del clients_cache[client_name]
+    except Exception as e:
+        print(f"Error with {clientName}: {e}")
 
-def start_server():
-    server_socket = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    server_socket.bind(('localhost', PORT))
-    server_socket.listen(5)
-    print(f"Server started on {'localhost'}:{PORT}")
+    finally:
+       
+        Time = datetime.datetime.now()
+        TimeDisconnected = Time.strftime("%x %X")
 
-    client_count = 0
+        with clientLock:
+            if clientName in clients:
+                clients[clientName]['Disconnected'] = TimeDisconnected
+                print(f"{clientName} disconnected at {TimeDisconnected}")
+                del clients[clientName]
 
-    while True:
-        client_socket, client_address = server_socket.accept()
-        if len(clients_cache) >= MAX_CLIENTS:
-            client_socket.send(b"Server is full. Try again later.")
-            client_socket.close()
-            continue
+        connectionSocket.close()
 
-        client_count += 1
-        client_name = f"Client{client_count:02d}"
-        client_socket.send(client_name.encode())
-        client_thread = threading.Thread(target=handle_client, args=(client_socket, client_name))
-        client_thread.start()
+while True:
+    connectionSocket, address = serverSocket.accept()
 
-if __name__ == "__main__":
-    start_server()
+    with clientLock:
+        if len(clients) < MAX_CLIENTS:
+            clientName = f"Client{clientCount:02d}"
+            clientCount += 1
+            threading.Thread(target=main, args=(connectionSocket, address, clientName), daemon=True).start()
+        else:
+            print(f"Server is full.")
+            connectionSocket.send(b"Server full. Try again later.")
+            connectionSocket.close()
